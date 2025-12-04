@@ -1,0 +1,51 @@
+# Binaries
+*.exe
+*.dll
+*.so
+*.dylib
+controller/controller
+
+# Go
+vendor/
+*.test
+*.out
+coverage.txt
+
+# Helm
+*.tgz
+charts/
+
+# Kubernetes
+kubeconfig
+*.kubeconfig
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Secrets
+*.key
+*.pem
+secrets.yaml
+values-secrets.yaml
+.env
+.env.*
+
+# Logs
+*.log
+logs/
+
+# Terraform
+*.tfstate
+*.tfstate.backup
+.terraform/
+
+# Temp
+tmp/
+temp/

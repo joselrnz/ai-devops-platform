@@ -1,0 +1,52 @@
+# Trivy Configuration for Container Scanning
+
+# Scan settings
+scan:
+  # Security checks to perform
+  security-checks:
+    - vuln      # Vulnerabilities
+    - config    # Misconfigurations
+    - secret    # Secrets
+
+  # Severity levels to report
+  severity:
+    - CRITICAL
+    - HIGH
+    - MEDIUM
+
+# Vulnerability database
+db:
+  repository: ghcr.io/aquasecurity/trivy-db
+  skip-update: false
+
+# Output format
+format: json
+
+# Cache settings
+cache:
+  dir: .trivycache
+
+# Ignore unfixed vulnerabilities
+ignore-unfixed: false
+
+# Exit code on vulnerabilities
+exit-code: 1
+
+# Timeout
+timeout: 5m
+
+# Skip files/directories
+skip-files:
+  - "**/*.md"
+  - "**/LICENSE"
+
+# Ignore specific CVEs
+vulnerability:
+  ignore:
+    # Example: Ignore CVE if it's not fixable yet
+    # - id: CVE-2023-12345
+    #   reason: "No fix available"
+
+# Policy settings
+policy:
+  bundle: oci::https://example.com/policies

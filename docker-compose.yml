@@ -1,0 +1,140 @@
+version: '3.8'
+
+services:
+  # ===========================================
+  # Core Services
+  # ===========================================
+
+  nl-automation-hub:
+    build: ./nl-automation-hub
+    ports:
+      - "8000:8000"
+    environment:
+      - LLM_GATEWAY_URL=http://llm-security-gateway:8002
+      - MCP_AWS_URL=http://mcp-aws-server:8001
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - llm-security-gateway
+      - mcp-aws-server
+      - redis
+    networks:
+      - ai-platform
+
+  llm-security-gateway:
+    build: ./llm-security-gateway
+    ports:
+      - "8002:8002"
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/gateway
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - ai-platform
+
+  mcp-aws-server:
+    build: ./mcp-aws-server
+    ports:
+      - "8001:8001"
+    environment:
+      - AWS_REGION=us-east-1
+    networks:
+      - ai-platform
+
+  # ===========================================
+  # Infrastructure Services
+  # ===========================================
+
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: gateway
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - ai-platform
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - ai-platform
+
+  # ===========================================
+  # Observability Stack
+  # ===========================================
+
+  prometheus:
+    image: prom/prometheus:v2.48.0
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./multi-cloud-observability-fabric/prometheus:/etc/prometheus
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    networks:
+      - ai-platform
+
+  grafana:
+    image: grafana/grafana:10.2.0
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    networks:
+      - ai-platform
+
+  # ===========================================
+  # Logging Stack
+  # ===========================================
+
+  opensearch:
+    image: opensearchproject/opensearch:2.11.0
+    environment:
+      - discovery.type=single-node
+      - DISABLE_SECURITY_PLUGIN=true
+      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+    volumes:
+      - opensearch_data:/usr/share/opensearch/data
+    networks:
+      - ai-platform
+
+  opensearch-dashboards:
+    image: opensearchproject/opensearch-dashboards:2.11.0
+    ports:
+      - "5601:5601"
+    environment:
+      - OPENSEARCH_HOSTS=["http://opensearch:9200"]
+      - DISABLE_SECURITY_DASHBOARDS_PLUGIN=true
+    depends_on:
+      - opensearch
+    networks:
+      - ai-platform
+
+networks:
+  ai-platform:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  prometheus_data:
+  grafana_data:
+  opensearch_data:

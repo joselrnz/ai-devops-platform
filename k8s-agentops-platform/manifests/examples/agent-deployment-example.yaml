@@ -1,0 +1,128 @@
+apiVersion: agentops.io/v1alpha1
+kind: AgentDeployment
+metadata:
+  name: claude-assistant
+  namespace: tenant-demo
+spec:
+  # LLM model to deploy
+  model: claude-3-sonnet
+
+  # Initial replica count (overridden by autoscaling)
+  replicas: 3
+
+  # Autoscaling configuration
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    metrics:
+      - type: Resource
+        resource:
+          name: cpu
+          target:
+            type: Utilization
+            averageUtilization: 70
+      - type: Resource
+        resource:
+          name: memory
+          target:
+            type: Utilization
+            averageUtilization: 80
+      # Custom metric example (requires Prometheus Adapter)
+      - type: Pods
+        pods:
+          metric:
+            name: http_requests_per_second
+          target:
+            type: AverageValue
+            averageValue: "1000"
+
+  # Resource requests and limits
+  resources:
+    requests:
+      cpu: "1000m"
+      memory: "2Gi"
+    limits:
+      cpu: "2000m"
+      memory: "4Gi"
+
+  # Security context
+  securityContext:
+    runAsNonRoot: true
+    readOnlyRootFilesystem: true
+    runAsUser: 1000
+
+  # Secrets to inject
+  secrets:
+    - name: anthropic-api-key
+      key: ANTHROPIC_API_KEY
+    - name: openai-api-key
+      key: OPENAI_API_KEY
+
+  # Monitoring configuration
+  monitoring:
+    enabled: true
+    scrapeInterval: "30s"
+
+  # Ingress configuration
+  ingress:
+    enabled: true
+    host: claude-assistant.example.com
+    tls: true
+
+---
+# Example with GPU resources
+apiVersion: agentops.io/v1alpha1
+kind: AgentDeployment
+metadata:
+  name: gpt4-gpu
+  namespace: tenant-demo
+spec:
+  model: gpt-4
+  replicas: 1
+
+  autoscaling:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 5
+
+  resources:
+    requests:
+      cpu: "4000m"
+      memory: "16Gi"
+      nvidia.com/gpu: 1
+    limits:
+      cpu: "8000m"
+      memory: "32Gi"
+      nvidia.com/gpu: 1
+
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+
+  secrets:
+    - name: openai-api-key
+      key: OPENAI_API_KEY
+
+  monitoring:
+    enabled: true
+    scrapeInterval: "15s"
+
+---
+# Example minimal deployment
+apiVersion: agentops.io/v1alpha1
+kind: AgentDeployment
+metadata:
+  name: llama-basic
+  namespace: tenant-test
+spec:
+  model: llama-2-70b
+  replicas: 2
+
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "1Gi"
+    limits:
+      cpu: "1000m"
+      memory: "2Gi"

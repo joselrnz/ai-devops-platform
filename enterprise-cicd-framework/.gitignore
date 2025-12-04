@@ -1,0 +1,48 @@
+# Enterprise CI/CD Framework - Git Ignore
+
+# Secrets and keys
+*.key
+*.pem
+*.p12
+*.pfx
+cosign.key
+cosign.pub
+secrets.yml
+.env
+.env.local
+
+# Trivy cache
+.trivycache/
+
+# SonarQube
+.scannerwork/
+
+# SBOM outputs
+sbom/
+*.spdx.json
+*.cyclonedx.json
+
+# Build artifacts
+dist/
+build/
+*.tar
+*.tar.gz
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Temporary files
+tmp/
+temp/
+*.tmp

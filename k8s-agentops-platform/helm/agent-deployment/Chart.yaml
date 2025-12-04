@@ -1,0 +1,14 @@
+apiVersion: v2
+name: agent-deployment
+description: Helm chart for deploying AI agents on Kubernetes
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+keywords:
+  - ai
+  - llm
+  - agent
+  - kubernetes
+maintainers:
+  - name: Jose
+    email: jose@example.com

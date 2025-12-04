@@ -1,0 +1,74 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nl-hub-config
+  namespace: nl-automation-hub
+  labels:
+    app.kubernetes.io/name: nl-hub-config
+    app.kubernetes.io/part-of: nl-automation-hub
+data:
+  # Application Settings
+  APP_NAME: "NL Automation Hub"
+  APP_VERSION: "1.0.0"
+  DEBUG: "false"
+  LOG_LEVEL: "INFO"
+
+  # Server Settings
+  HOST: "0.0.0.0"
+  PORT: "8000"
+  WORKERS: "4"
+
+  # LLM Configuration (Routes through Project 2)
+  LLM_GATEWAY_URL: "http://llm-security-gateway.llm-gateway:8000"
+  LLM_PROVIDER: "anthropic"
+  ANTHROPIC_MODEL: "claude-3-sonnet-20240229"
+  OPENAI_MODEL: "gpt-4-turbo-preview"
+
+  # LangSmith Configuration
+  LANGCHAIN_TRACING_V2: "true"
+  LANGCHAIN_ENDPOINT: "https://api.smith.langchain.com"
+  LANGCHAIN_PROJECT: "nl-automation-hub-prod"
+
+  # Project 1: MCP AWS Server
+  MCP_AWS_SERVER_URL: "http://mcp-aws-server.mcp-aws:8080"
+
+  # Project 3: K8s AgentOps Platform
+  K8S_AGENTOPS_URL: "http://agentops-api.agentops-system:8000"
+
+  # Project 4: Enterprise CI/CD Framework
+  CICD_API_URL: "http://cicd-api.cicd:8000"
+
+  # Project 5: Centralized Logging & Threat Analytics
+  OPENSEARCH_URL: "http://opensearch.logging:9200"
+  OPENSEARCH_USER: "admin"
+
+  # Project 6: Multi-Cloud Observability Fabric
+  PROMETHEUS_URL: "http://prometheus.observability:9090"
+  TEMPO_URL: "http://tempo.observability:3200"
+  LOKI_URL: "http://loki.observability:3100"
+
+  # Database Configuration
+  POSTGRES_HOST: "nl-hub-postgres"
+  POSTGRES_PORT: "5432"
+  POSTGRES_DB: "nl_automation_hub"
+
+  # Redis Configuration
+  REDIS_HOST: "nl-hub-redis"
+  REDIS_PORT: "6379"
+  REDIS_DB: "0"
+
+  # Voice Configuration
+  ENABLE_VOICE: "true"
+  WHISPER_MODEL_SIZE: "base"
+
+  # Feature Flags
+  ENABLE_WEBSOCKETS: "true"
+  ENABLE_STREAMING: "true"
+  ENABLE_AUDIT_LOG: "true"
+
+  # Rate Limiting
+  RATE_LIMIT_REQUESTS_PER_MINUTE: "60"
+  RATE_LIMIT_TOKENS_PER_MINUTE: "100000"
+
+  # CORS (update for production)
+  CORS_ORIGINS: '["https://nl-hub.your-domain.com"]'

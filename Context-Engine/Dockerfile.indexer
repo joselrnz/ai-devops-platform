@@ -1,0 +1,21 @@
+# Dockerized code indexer for Qdrant
+FROM python:3.11-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    WORK_ROOTS="/work,/app"
+
+# OS packages needed: git for history ingestion
+RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates && rm -rf /var/lib/apt/lists/*
+
+# Python deps: reuse shared requirements file
+COPY requirements.txt /tmp/requirements.txt
+RUN pip install --no-cache-dir --upgrade -r /tmp/requirements.txt
+
+# Bake scripts into the image so we can mount arbitrary code at /work
+COPY scripts /app/scripts
+
+WORKDIR /work
+
+# Default command shows help; Makefile/compose will override entrypoint
+CMD ["python", "/app/scripts/ingest_code.py", "--help"]

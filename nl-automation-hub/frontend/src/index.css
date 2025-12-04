@@ -1,0 +1,39 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom styles */
+body {
+  @apply bg-gray-950 text-gray-100 antialiased;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-gray-900;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-gray-700 rounded-full;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-gray-600;
+}
+
+/* Prose overrides for markdown */
+.prose pre {
+  @apply bg-gray-900 border border-gray-700 rounded-lg;
+}
+
+.prose code {
+  @apply bg-gray-900 px-1 py-0.5 rounded text-indigo-400;
+}
+
+.prose code::before,
+.prose code::after {
+  content: none;
+}

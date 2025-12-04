@@ -1,0 +1,103 @@
+{
+  "dashboard": {
+    "title": "Agent Overview Dashboard",
+    "tags": ["agentops", "llm", "agents"],
+    "timezone": "browser",
+    "panels": [
+      {
+        "title": "Request Rate",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "sum(rate(http_requests_total{job=\"agent\"}[5m])) by (model)",
+            "legendFormat": "{{model}}"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "reqps",
+            "label": "Requests/sec"
+          }
+        ]
+      },
+      {
+        "title": "Request Latency (p95)",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job=\"agent\"}[5m])) by (le, model))",
+            "legendFormat": "p95 {{model}}"
+          },
+          {
+            "expr": "histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket{job=\"agent\"}[5m])) by (le, model))",
+            "legendFormat": "p50 {{model}}"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "s",
+            "label": "Latency"
+          }
+        ]
+      },
+      {
+        "title": "Error Rate",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "sum(rate(http_requests_total{job=\"agent\",status=~\"5..\"}[5m])) by (model) / sum(rate(http_requests_total{job=\"agent\"}[5m])) by (model)",
+            "legendFormat": "{{model}}"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "percentunit",
+            "label": "Error Rate"
+          }
+        ]
+      },
+      {
+        "title": "Active Pods",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "count(kube_pod_status_phase{namespace=~\"tenant-.*\",phase=\"Running\"}) by (namespace)",
+            "legendFormat": "{{namespace}}"
+          }
+        ]
+      },
+      {
+        "title": "CPU Usage",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=~\"tenant-.*\",container=\"agent\"}[5m])) by (namespace)",
+            "legendFormat": "{{namespace}}"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "percentunit",
+            "label": "CPU"
+          }
+        ]
+      },
+      {
+        "title": "Memory Usage",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "sum(container_memory_working_set_bytes{namespace=~\"tenant-.*\",container=\"agent\"}) by (namespace)",
+            "legendFormat": "{{namespace}}"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "bytes",
+            "label": "Memory"
+          }
+        ]
+      }
+    ]
+  }
+}

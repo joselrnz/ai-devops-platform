@@ -1,0 +1,31 @@
+title: Brute Force Login Attempts
+id: 1a2b3c4d-5e6f-7g8h-9i0j-k1l2m3n4o5p6
+status: stable
+description: Detects multiple failed login attempts from the same source IP indicating brute force attack
+references:
+  - https://attack.mitre.org/techniques/T1110/
+author: Jose
+date: 2024/01/15
+modified: 2024/01/15
+tags:
+  - attack.credential_access
+  - attack.t1110.001
+  - attack.t1110.003
+logsource:
+  category: authentication
+  product: linux
+detection:
+  selection:
+    event.action: 'login_failed'
+    event.outcome: 'failure'
+  timeframe: 5m
+  condition: selection | count(source.ip) by source.ip > 10
+fields:
+  - source.ip
+  - user.name
+  - source.geo.country_name
+  - event.action
+falsepositives:
+  - Legitimate users with forgotten passwords
+  - Misconfigured applications
+level: medium

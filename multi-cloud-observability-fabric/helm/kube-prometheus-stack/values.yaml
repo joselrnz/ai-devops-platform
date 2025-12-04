@@ -1,0 +1,314 @@
+# kube-prometheus-stack values for production deployment
+
+# Prometheus configuration
+prometheus:
+  prometheusSpec:
+    # Retention
+    retention: 15d
+    retentionSize: "50GB"
+
+    # Resources
+    resources:
+      requests:
+        cpu: 1000m
+        memory: 4Gi
+      limits:
+        cpu: 2000m
+        memory: 8Gi
+
+    # Storage
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: gp3
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 100Gi
+
+    # Remote write to Thanos or Cortex for long-term storage
+    remoteWrite:
+      - url: http://thanos-receive:19291/api/v1/receive
+        writeRelabelConfigs:
+          - sourceLabels: [__name__]
+            regex: 'container_.*|node_.*|kube_.*'
+            action: keep
+
+    # Service monitors
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+
+    # Additional scrape configs
+    additionalScrapeConfigs:
+      # AWS CloudWatch Exporter
+      - job_name: 'cloudwatch-exporter'
+        static_configs:
+          - targets: ['cloudwatch-exporter:9106']
+        relabel_configs:
+          - source_labels: [__address__]
+            target_label: cloud_provider
+            replacement: aws
+
+      # Azure Monitor Exporter
+      - job_name: 'azure-monitor-exporter'
+        static_configs:
+          - targets: ['azure-monitor-exporter:9276']
+        relabel_configs:
+          - source_labels: [__address__]
+            target_label: cloud_provider
+            replacement: azure
+
+      # GCP Stackdriver Exporter
+      - job_name: 'stackdriver-exporter'
+        static_configs:
+          - targets: ['stackdriver-exporter:9255']
+        relabel_configs:
+          - source_labels: [__address__]
+            target_label: cloud_provider
+            replacement: gcp
+
+    # Enable admin API for snapshot support
+    enableAdminAPI: true
+
+    # External labels for multi-cluster
+    externalLabels:
+      cluster: production
+      region: us-east-1
+
+    # Replica for HA
+    replicas: 2
+
+    # Pod anti-affinity
+    affinity:
+      podAntiAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+                - key: app.kubernetes.io/name
+                  operator: In
+                  values:
+                    - prometheus
+            topologyKey: kubernetes.io/hostname
+
+# Grafana configuration
+grafana:
+  enabled: true
+
+  # Admin credentials
+  adminPassword: "ChangeMe123!"  # Change in production
+
+  # Persistence
+  persistence:
+    enabled: true
+    storageClassName: gp3
+    size: 10Gi
+
+  # Resources
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+
+  # Replicas for HA
+  replicas: 2
+
+  # Data sources
+  additionalDataSources:
+    - name: Loki
+      type: loki
+      access: proxy
+      url: http://loki-gateway
+      jsonData:
+        maxLines: 1000
+
+    - name: Tempo
+      type: tempo
+      access: proxy
+      url: http://tempo-query-frontend:3100
+      jsonData:
+        tracesToLogs:
+          datasourceUid: 'Loki'
+          tags: ['job', 'instance', 'pod', 'namespace']
+          mappedTags: [{ key: 'service.name', value: 'service' }]
+          mapTagNamesEnabled: false
+          spanStartTimeShift: '1h'
+          spanEndTimeShift: '1h'
+          filterByTraceID: false
+          filterBySpanID: false
+        tracesToMetrics:
+          datasourceUid: 'Prometheus'
+          tags: [{ key: 'service.name', value: 'service' }]
+          queries:
+            - name: 'Sample query'
+              query: 'sum(rate(traces_spanmetrics_latency_bucket{$__tags}[5m]))'
+        serviceMap:
+          datasourceUid: 'Prometheus'
+        nodeGraph:
+          enabled: true
+
+  # Dashboard providers
+  dashboardProviders:
+    dashboardproviders.yaml:
+      apiVersion: 1
+      providers:
+        - name: 'default'
+          orgId: 1
+          folder: ''
+          type: file
+          disableDeletion: false
+          editable: true
+          options:
+            path: /var/lib/grafana/dashboards/default
+        - name: 'infrastructure'
+          orgId: 1
+          folder: 'Infrastructure'
+          type: file
+          options:
+            path: /var/lib/grafana/dashboards/infrastructure
+        - name: 'applications'
+          orgId: 1
+          folder: 'Applications'
+          type: file
+          options:
+            path: /var/lib/grafana/dashboards/applications
+
+  # Dashboard config maps
+  dashboardsConfigMaps:
+    infrastructure: "grafana-dashboards-infrastructure"
+    applications: "grafana-dashboards-applications"
+
+  # Plugins
+  plugins:
+    - grafana-piechart-panel
+    - grafana-clock-panel
+    - grafana-polystat-panel
+
+  # Environment variables
+  env:
+    GF_EXPLORE_ENABLED: "true"
+    GF_ALERTING_ENABLED: "true"
+    GF_UNIFIED_ALERTING_ENABLED: "true"
+    GF_FEATURE_TOGGLES_ENABLE: "traceqlEditor"
+
+  # Ingress
+  ingress:
+    enabled: true
+    ingressClassName: nginx
+    annotations:
+      cert-manager.io/cluster-issuer: letsencrypt-prod
+    hosts:
+      - grafana.example.com
+    tls:
+      - secretName: grafana-tls
+        hosts:
+          - grafana.example.com
+
+# Alertmanager configuration
+alertmanager:
+  alertmanagerSpec:
+    # Resources
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 200m
+        memory: 256Mi
+
+    # Storage
+    storage:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: gp3
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 10Gi
+
+    # Replicas for HA
+    replicas: 3
+
+    # Configuration
+    config:
+      global:
+        resolve_timeout: 5m
+
+      route:
+        group_by: ['alertname', 'cluster', 'service']
+        group_wait: 10s
+        group_interval: 10s
+        repeat_interval: 12h
+        receiver: 'slack-notifications'
+        routes:
+          - match:
+              severity: critical
+            receiver: 'pagerduty-critical'
+            continue: true
+          - match:
+              severity: warning
+            receiver: 'slack-notifications'
+
+      receivers:
+        - name: 'slack-notifications'
+          slack_configs:
+            - api_url: 'https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK'
+              channel: '#alerts'
+              title: 'Alert: {{ .GroupLabels.alertname }}'
+              text: '{{ range .Alerts }}{{ .Annotations.description }}{{ end }}'
+
+        - name: 'pagerduty-critical'
+          pagerduty_configs:
+            - service_key: 'YOUR_PAGERDUTY_KEY'
+              description: '{{ .GroupLabels.alertname }}'
+
+# Prometheus Operator
+prometheusOperator:
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+# Node Exporter (system metrics)
+nodeExporter:
+  enabled: true
+
+# Kube State Metrics
+kubeStateMetrics:
+  enabled: true
+
+# Default rules
+defaultRules:
+  create: true
+  rules:
+    alertmanager: true
+    etcd: false
+    configReloaders: true
+    general: true
+    k8s: true
+    kubeApiserverAvailability: true
+    kubeApiserverBurnrate: true
+    kubeApiserverHistogram: true
+    kubeApiserverSlos: true
+    kubeControllerManager: true
+    kubelet: true
+    kubeProxy: true
+    kubePrometheusGeneral: true
+    kubePrometheusNodeRecording: true
+    kubernetesApps: true
+    kubernetesResources: true
+    kubernetesStorage: true
+    kubernetesSystem: true
+    kubeScheduler: true
+    kubeStateMetrics: true
+    network: true
+    node: true
+    nodeExporterAlerting: true
+    nodeExporterRecording: true
+    prometheus: true
+    prometheusOperator: true

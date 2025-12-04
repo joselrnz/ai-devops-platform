@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "agent-deployment.fullname" . }}
+  labels:
+    {{- include "agent-deployment.labels" . | nindent 4 }}
+data:
+  config.yaml: |
+    server:
+      port: {{ .Values.service.targetPort }}
+    logging:
+      level: {{ .Values.env | default (list) | mustHas (dict "name" "LOG_LEVEL" "value" "info") | pluck "value" | first | default "info" }}
+    metrics:
+      enabled: {{ .Values.serviceMonitor.enabled }}
+      port: {{ .Values.env | default (list) | mustHas (dict "name" "METRICS_PORT" "value" "8080") | pluck "value" | first | default "8080" }}

@@ -1,0 +1,41 @@
+# Data directories
+prometheus-data/
+grafana-data/
+loki-data/
+tempo-data/
+data/
+
+# Logs
+*.log
+logs/
+
+# Secrets
+*.pem
+*.key
+secrets.yaml
+credentials.yaml
+.env
+.env.*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Terraform
+*.tfstate
+*.tfstate.backup
+.terraform/
+
+# Helm
+*.tgz
+charts/
+
+# Temp
+tmp/
+temp/
+*.tmp

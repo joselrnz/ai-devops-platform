@@ -1,0 +1,232 @@
+# GitLab CI/CD Pipeline for Python Applications
+# Features: Testing, SAST, Container Scanning, SBOM, GitOps
+
+stages:
+  - lint
+  - test
+  - security
+  - build
+  - scan
+  - deploy
+
+variables:
+  PYTHON_VERSION: "3.11"
+  DOCKER_DRIVER: overlay2
+  DOCKER_TLS_CERTDIR: "/certs"
+  IMAGE_TAG: $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA
+  LATEST_TAG: $CI_REGISTRY_IMAGE:latest
+
+# Cache pip packages
+.python-cache:
+  cache:
+    key: ${CI_COMMIT_REF_SLUG}-python
+    paths:
+      - .venv/
+      - .cache/pip
+
+# Lint Job
+lint:black:
+  stage: lint
+  image: python:${PYTHON_VERSION}
+  extends: .python-cache
+  before_script:
+    - python -m venv .venv
+    - source .venv/bin/activate
+    - pip install black ruff mypy
+  script:
+    - black --check src/
+  allow_failure: false
+
+lint:ruff:
+  stage: lint
+  image: python:${PYTHON_VERSION}
+  extends: .python-cache
+  before_script:
+    - python -m venv .venv
+    - source .venv/bin/activate
+    - pip install ruff
+  script:
+    - ruff check src/
+  allow_failure: false
+
+lint:mypy:
+  stage: lint
+  image: python:${PYTHON_VERSION}
+  extends: .python-cache
+  before_script:
+    - python -m venv .venv
+    - source .venv/bin/activate
+    - pip install mypy
+  script:
+    - mypy src/ --install-types --non-interactive
+  allow_failure: true
+
+# Test Job
+test:unit:
+  stage: test
+  image: python:${PYTHON_VERSION}
+  extends: .python-cache
+  services:
+    - redis:7-alpine
+    - postgres:15-alpine
+  variables:
+    POSTGRES_DB: test_db
+    POSTGRES_USER: test_user
+    POSTGRES_PASSWORD: test_pass
+    REDIS_HOST: redis
+    DB_HOST: postgres
+  before_script:
+    - python -m venv .venv
+    - source .venv/bin/activate
+    - pip install -e ".[dev]"
+  script:
+    - pytest --cov=src --cov-report=xml --cov-report=term --cov-report=html --junitxml=report.xml
+  coverage: '/(?i)total.*? (100(?:\.0+)?\%|[1-9]?\d(?:\.\d+)?\%)$/'
+  artifacts:
+    when: always
+    reports:
+      junit: report.xml
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage.xml
+    paths:
+      - htmlcov/
+    expire_in: 1 week
+
+# SAST with Bandit
+security:bandit:
+  stage: security
+  image: python:${PYTHON_VERSION}
+  before_script:
+    - pip install bandit
+  script:
+    - bandit -r src/ -f json -o bandit-report.json
+    - bandit -r src/ -f txt
+  artifacts:
+    paths:
+      - bandit-report.json
+    expire_in: 1 week
+  allow_failure: true
+
+# Secret Detection
+security:gitleaks:
+  stage: security
+  image: zricethezav/gitleaks:latest
+  script:
+    - gitleaks detect --source . --verbose --report-path gitleaks-report.json
+  artifacts:
+    paths:
+      - gitleaks-report.json
+    expire_in: 1 week
+  allow_failure: true
+
+# Dependency Scanning (GitLab built-in)
+include:
+  - template: Security/Dependency-Scanning.gitlab-ci.yml
+  - template: Security/SAST.gitlab-ci.yml
+  - template: Security/Secret-Detection.gitlab-ci.yml
+
+# Build Docker Image
+build:docker:
+  stage: build
+  image: docker:latest
+  services:
+    - docker:dind
+  before_script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+  script:
+    - docker build -t $IMAGE_TAG -t $LATEST_TAG .
+    - docker push $IMAGE_TAG
+    - docker push $LATEST_TAG
+    - echo "IMAGE_TAG=$IMAGE_TAG" >> build.env
+  artifacts:
+    reports:
+      dotenv: build.env
+  only:
+    - main
+    - develop
+
+# Container Scanning with Trivy
+scan:trivy:
+  stage: scan
+  image: aquasec/trivy:latest
+  services:
+    - docker:dind
+  variables:
+    TRIVY_NO_PROGRESS: "true"
+    TRIVY_CACHE_DIR: ".trivycache/"
+  cache:
+    paths:
+      - .trivycache/
+  script:
+    - trivy image --exit-code 0 --severity LOW,MEDIUM $IMAGE_TAG
+    - trivy image --exit-code 0 --severity HIGH,CRITICAL --format sarif --output trivy-report.sarif $IMAGE_TAG
+    - trivy image --exit-code 1 --severity CRITICAL $IMAGE_TAG
+  artifacts:
+    paths:
+      - trivy-report.sarif
+    expire_in: 1 week
+  only:
+    - main
+    - develop
+  allow_failure: false
+
+# Generate SBOM
+scan:sbom:
+  stage: scan
+  image: anchore/syft:latest
+  script:
+    - syft $IMAGE_TAG -o spdx-json > sbom.spdx.json
+    - syft $IMAGE_TAG -o cyclonedx-json > sbom.cyclonedx.json
+  artifacts:
+    paths:
+      - sbom.spdx.json
+      - sbom.cyclonedx.json
+    expire_in: 30 days
+  only:
+    - main
+    - develop
+
+# Deploy to Staging (Auto)
+deploy:staging:
+  stage: deploy
+  image: bitnami/kubectl:latest
+  script:
+    - kubectl config use-context $KUBE_CONTEXT_STAGING
+    - kubectl set image deployment/myapp myapp=$IMAGE_TAG -n staging
+    - kubectl rollout status deployment/myapp -n staging
+  environment:
+    name: staging
+    url: https://staging.example.com
+  only:
+    - develop
+
+# Deploy to Production (Manual)
+deploy:production:
+  stage: deploy
+  image: bitnami/kubectl:latest
+  script:
+    - kubectl config use-context $KUBE_CONTEXT_PRODUCTION
+    - kubectl set image deployment/myapp myapp=$IMAGE_TAG -n production
+    - kubectl rollout status deployment/myapp -n production
+  environment:
+    name: production
+    url: https://app.example.com
+  only:
+    - main
+  when: manual  # Requires manual approval
+
+# Rollback (Manual)
+rollback:production:
+  stage: deploy
+  image: bitnami/kubectl:latest
+  script:
+    - kubectl config use-context $KUBE_CONTEXT_PRODUCTION
+    - kubectl rollout undo deployment/myapp -n production
+    - kubectl rollout status deployment/myapp -n production
+  environment:
+    name: production
+    url: https://app.example.com
+  only:
+    - main
+  when: manual

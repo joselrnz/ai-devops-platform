@@ -1,0 +1,57 @@
+title: Sensitive Data Access Detected
+id: 8h9i0j1k-2l3m-4n5o-6p7q-r8s9t0u1v2w3
+status: stable
+description: Detects access to sensitive files containing PII, credentials, or secrets
+references:
+  - https://attack.mitre.org/techniques/T1552/
+  - https://attack.mitre.org/techniques/T1083/
+author: Jose
+date: 2024/01/15
+tags:
+  - attack.credential_access
+  - attack.discovery
+  - attack.t1552.001
+  - attack.t1083
+logsource:
+  category: file_access
+  product: linux
+detection:
+  selection_credentials:
+    file.path|contains:
+      - '/.ssh/id_rsa'
+      - '/.ssh/id_dsa'
+      - '/.aws/credentials'
+      - '/.kube/config'
+      - '/etc/shadow'
+      - '/etc/gshadow'
+      - '.env'
+      - 'credentials.json'
+      - 'secrets.yaml'
+      - 'vault-token'
+  selection_pii:
+    file.path|contains:
+      - 'customers.db'
+      - 'users.csv'
+      - 'pii_data'
+      - 'personal_info'
+  filter_system:
+    user.name:
+      - 'root'
+      - 'backup'
+      - 'vault'
+    process.name:
+      - 'backup-agent'
+      - 'vault-agent'
+  condition: (selection_credentials or selection_pii) and not filter_system
+fields:
+  - user.name
+  - user.id
+  - file.path
+  - process.name
+  - process.command_line
+  - source.ip
+falsepositives:
+  - Legitimate system administration
+  - Backup operations
+  - Automated security scans
+level: high

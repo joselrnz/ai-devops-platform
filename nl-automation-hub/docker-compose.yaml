@@ -1,0 +1,147 @@
+version: '3.8'
+
+services:
+  # ==========================================================================
+  # NL Automation Hub API
+  # ==========================================================================
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - APP_NAME=NL Automation Hub
+      - DEBUG=true
+      - LOG_LEVEL=DEBUG
+      # LLM Gateway (use host.docker.internal for local dev)
+      - LLM_GATEWAY_URL=http://host.docker.internal:8001
+      - LLM_PROVIDER=anthropic
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      # LangSmith
+      - LANGCHAIN_TRACING_V2=true
+      - LANGCHAIN_API_KEY=${LANGCHAIN_API_KEY}
+      - LANGCHAIN_PROJECT=nl-automation-hub-dev
+      # Project URLs (local development)
+      - MCP_AWS_SERVER_URL=http://host.docker.internal:8080
+      - K8S_AGENTOPS_URL=http://host.docker.internal:8002
+      - CICD_API_URL=http://host.docker.internal:8003
+      - OPENSEARCH_URL=http://opensearch:9200
+      - PROMETHEUS_URL=http://prometheus:9090
+      - TEMPO_URL=http://tempo:3200
+      # Database
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=nl_automation_hub
+      - POSTGRES_USER=nl_hub_user
+      - POSTGRES_PASSWORD=devpassword
+      # Redis
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      # Features
+      - ENABLE_VOICE=true
+      - ENABLE_WEBSOCKETS=true
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - ./src:/app/src:ro
+    networks:
+      - nl-hub-network
+
+  # ==========================================================================
+  # Frontend
+  # ==========================================================================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:80"
+    environment:
+      - VITE_API_URL=http://localhost:8000
+      - VITE_WS_URL=ws://localhost:8000
+    depends_on:
+      - api
+    networks:
+      - nl-hub-network
+
+  # ==========================================================================
+  # PostgreSQL Database
+  # ==========================================================================
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_DB=nl_automation_hub
+      - POSTGRES_USER=nl_hub_user
+      - POSTGRES_PASSWORD=devpassword
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - nl-hub-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nl_hub_user -d nl_automation_hub"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ==========================================================================
+  # Redis Cache
+  # ==========================================================================
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - nl-hub-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ==========================================================================
+  # OpenSearch (for log queries - optional for dev)
+  # ==========================================================================
+  opensearch:
+    image: opensearchproject/opensearch:2.11.0
+    environment:
+      - discovery.type=single-node
+      - plugins.security.disabled=true
+      - OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m
+    volumes:
+      - opensearch_data:/usr/share/opensearch/data
+    ports:
+      - "9200:9200"
+    networks:
+      - nl-hub-network
+    profiles:
+      - full
+
+  # ==========================================================================
+  # Prometheus (for metrics queries - optional for dev)
+  # ==========================================================================
+  prometheus:
+    image: prom/prometheus:v2.47.0
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    networks:
+      - nl-hub-network
+    profiles:
+      - full
+
+networks:
+  nl-hub-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  opensearch_data:

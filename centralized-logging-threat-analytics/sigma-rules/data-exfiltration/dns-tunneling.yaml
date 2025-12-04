@@ -1,0 +1,37 @@
+title: DNS Tunneling Detected
+id: 4d5e6f7g-8h9i-0j1k-2l3m-n4o5p6q7r8s9
+status: stable
+description: Detects potential DNS tunneling used for data exfiltration or C2 communication
+references:
+  - https://attack.mitre.org/techniques/T1071/004/
+  - https://attack.mitre.org/techniques/T1048/003/
+author: Jose
+date: 2024/01/15
+tags:
+  - attack.exfiltration
+  - attack.command_and_control
+  - attack.t1071.004
+  - attack.t1048.003
+logsource:
+  category: dns
+  product: dns
+detection:
+  selection:
+    dns.question.type: 'TXT'
+    dns.response.size: '>= 200'
+  selection_long_domain:
+    dns.question.name|length: '>= 50'
+  selection_high_entropy:
+    dns.question.name|entropy: '>= 4.5'
+  timeframe: 1m
+  condition: selection or (selection_long_domain and selection_high_entropy) | count(source.ip) by source.ip > 50
+fields:
+  - source.ip
+  - dns.question.name
+  - dns.question.type
+  - dns.response.size
+falsepositives:
+  - Legitimate TXT record queries
+  - Certificate validation
+  - DKIM/SPF checks
+level: high

@@ -1,0 +1,43 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: nl-hub-api
+  namespace: nl-automation-hub
+  labels:
+    app: nl-hub-api
+    app.kubernetes.io/name: nl-hub-api
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000
+      protocol: TCP
+  selector:
+    app: nl-hub-api
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nl-hub-frontend
+  namespace: nl-automation-hub
+  labels:
+    app: nl-hub-frontend
+    app.kubernetes.io/name: nl-hub-frontend
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80
+      protocol: TCP
+  selector:
+    app: nl-hub-frontend
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: nl-hub-api
+  namespace: nl-automation-hub
+  labels:
+    app.kubernetes.io/name: nl-hub-api

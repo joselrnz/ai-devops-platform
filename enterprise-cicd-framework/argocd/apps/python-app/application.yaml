@@ -1,0 +1,84 @@
+# ArgoCD Application Manifest for Python App
+# Defines GitOps deployment configuration
+
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: python-app
+  namespace: argocd
+  # Add labels for organization
+  labels:
+    app: python-app
+    tier: backend
+    managed-by: argocd
+  # Finalizer to ensure proper cleanup
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  # Project the application belongs to
+  project: default
+
+  # Source repository configuration
+  source:
+    repoURL: https://github.com/myorg/python-app
+    targetRevision: HEAD  # Can be branch, tag, or commit SHA
+    path: k8s/overlays/production
+
+    # For Helm charts
+    # helm:
+    #   valueFiles:
+    #     - values-production.yaml
+    #   parameters:
+    #     - name: image.tag
+    #       value: latest
+
+    # For Kustomize
+    kustomize:
+      # Build options
+      buildOptions: --enable-helm
+      # Common labels
+      commonLabels:
+        app: python-app
+        deployed-by: argocd
+      # Image overrides
+      images:
+        - python-app=ghcr.io/myorg/python-app:latest
+
+  # Destination cluster and namespace
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: production
+
+  # Sync policy and options
+  syncPolicy:
+    # Automated sync (disable for manual approval)
+    automated:
+      prune: true      # Delete resources not in Git
+      selfHeal: true   # Revert manual changes
+      allowEmpty: false
+
+    # Sync options
+    syncOptions:
+      - CreateNamespace=true           # Auto-create namespace
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true                 # Prune after other resources are synced
+      - RespectIgnoreDifferences=true
+      - ApplyOutOfSyncOnly=true        # Only sync out-of-sync resources
+
+    # Retry policy for failed syncs
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+
+  # Ignore differences for certain fields
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /spec/replicas  # Ignore if HPA manages replicas
+
+  # Health assessment
+  revisionHistoryLimit: 10

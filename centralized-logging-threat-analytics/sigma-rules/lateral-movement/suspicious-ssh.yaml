@@ -1,0 +1,38 @@
+title: Suspicious Internal SSH Connections
+id: 5e6f7g8h-9i0j-1k2l-3m4n-o5p6q7r8s9t0
+status: stable
+description: Detects suspicious SSH connections between internal hosts indicating lateral movement
+references:
+  - https://attack.mitre.org/techniques/T1021/004/
+author: Jose
+date: 2024/01/15
+tags:
+  - attack.lateral_movement
+  - attack.t1021.004
+logsource:
+  category: network_connection
+  product: firewall
+detection:
+  selection:
+    event.action: 'allowed'
+    destination.port: 22
+    network.direction: 'internal'
+  filter_normal:
+    source.ip|cidr:
+      - '10.0.0.0/8'
+      - '172.16.0.0/12'
+      - '192.168.0.0/16'
+    user.name|endswith: '-admin'
+  selection_rapid:
+    timeframe: 5m
+  condition: selection and not filter_normal | count(destination.ip) by source.ip > 5
+fields:
+  - source.ip
+  - destination.ip
+  - user.name
+  - source.geo.country_name
+falsepositives:
+  - Legitimate administrative SSH access
+  - Automated deployment scripts
+  - Configuration management tools
+level: medium

@@ -1,0 +1,45 @@
+# Logs
+*.log
+logs/
+
+# OpenSearch data
+opensearch-data/
+data/
+
+# Fluent Bit state
+*.db
+flb-storage/
+
+# Secrets
+*.key
+*.pem
+secrets.yaml
+credentials.yaml
+.env
+.env.*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Terraform
+*.tfstate
+*.tfstate.backup
+.terraform/
+
+# Helm
+*.tgz
+charts/
+
+# Docker
+.dockerignore
+
+# Temp
+tmp/
+temp/
+*.tmp

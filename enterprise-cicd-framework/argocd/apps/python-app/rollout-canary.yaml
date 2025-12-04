@@ -1,0 +1,170 @@
+# Argo Rollouts - Canary Deployment Strategy
+# Gradually shifts traffic from stable to canary version
+
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: python-app
+  namespace: production
+spec:
+  replicas: 5
+  revisionHistoryLimit: 3
+
+  # Selector for pods
+  selector:
+    matchLabels:
+      app: python-app
+
+  # Pod template
+  template:
+    metadata:
+      labels:
+        app: python-app
+        version: canary
+    spec:
+      containers:
+      - name: python-app
+        image: ghcr.io/myorg/python-app:latest
+        ports:
+        - name: http
+          containerPort: 8080
+          protocol: TCP
+        env:
+        - name: ENVIRONMENT
+          value: "production"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: http
+          initialDelaySeconds: 5
+          periodSeconds: 5
+
+  # Canary deployment strategy
+  strategy:
+    canary:
+      # Number of canary pods
+      # maxSurge: 1
+      # maxUnavailable: 0
+
+      # Canary service
+      canaryService: python-app-canary
+      # Stable service
+      stableService: python-app-stable
+
+      # Traffic routing (requires service mesh or ingress controller)
+      trafficRouting:
+        # For Istio
+        istio:
+          virtualService:
+            name: python-app
+            routes:
+              - primary
+
+        # For NGINX Ingress
+        # nginx:
+        #   stableIngress: python-app
+        #   additionalIngressAnnotations:
+        #     canary-by-header: X-Canary
+
+      # Canary steps
+      steps:
+      # Step 1: Deploy canary with 20% traffic
+      - setWeight: 20
+      - pause:
+          duration: 5m
+
+      # Step 2: Run analysis
+      - analysis:
+          templates:
+          - templateName: success-rate
+          args:
+          - name: service-name
+            value: python-app-canary
+
+      # Step 3: Increase to 40%
+      - setWeight: 40
+      - pause:
+          duration: 5m
+
+      # Step 4: Increase to 60%
+      - setWeight: 60
+      - pause:
+          duration: 5m
+
+      # Step 5: Increase to 80%
+      - setWeight: 80
+      - pause:
+          duration: 5m
+
+      # Step 6: Full rollout
+      - setWeight: 100
+
+  # Auto-rollback on failure
+  analysis:
+    successfulRunHistoryLimit: 5
+    unsuccessfulRunHistoryLimit: 5
+
+---
+# Analysis Template - Success Rate
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: success-rate
+  namespace: production
+spec:
+  args:
+  - name: service-name
+
+  metrics:
+  # Prometheus query for success rate
+  - name: success-rate
+    interval: 1m
+    count: 5
+    successCondition: result[0] >= 0.95
+    failureLimit: 3
+    provider:
+      prometheus:
+        address: http://prometheus:9090
+        query: |
+          sum(rate(
+            http_requests_total{
+              service="{{ args.service-name }}",
+              status!~"5.."
+            }[1m]
+          )) /
+          sum(rate(
+            http_requests_total{
+              service="{{ args.service-name }}"
+            }[1m]
+          ))
+
+  # Latency check (p95 < 500ms)
+  - name: latency-p95
+    interval: 1m
+    count: 5
+    successCondition: result[0] < 0.5
+    failureLimit: 3
+    provider:
+      prometheus:
+        address: http://prometheus:9090
+        query: |
+          histogram_quantile(0.95,
+            sum(rate(
+              http_request_duration_seconds_bucket{
+                service="{{ args.service-name }}"
+              }[1m]
+            )) by (le)
+          )

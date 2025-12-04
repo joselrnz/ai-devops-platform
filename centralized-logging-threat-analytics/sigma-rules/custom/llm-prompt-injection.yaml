@@ -1,0 +1,55 @@
+title: LLM Prompt Injection Attempt
+id: 7g8h9i0j-1k2l-3m4n-5o6p-q7r8s9t0u1v2
+status: experimental
+description: Detects potential prompt injection attacks against LLM endpoints
+references:
+  - https://owasp.org/www-project-top-10-for-large-language-model-applications/
+  - https://attack.mitre.org/techniques/T1190/
+author: Jose
+date: 2024/01/15
+tags:
+  - attack.initial_access
+  - attack.t1190
+  - owasp.llm01
+logsource:
+  category: application
+  product: llm-gateway
+detection:
+  selection_endpoint:
+    http.request.method: 'POST'
+    http.request.path|contains:
+      - '/chat/completions'
+      - '/completions'
+      - '/v1/chat'
+  patterns_ignore:
+    http.request.body|contains:
+      - 'ignore previous instructions'
+      - 'disregard system prompt'
+      - 'bypass restrictions'
+      - 'reveal your instructions'
+      - 'forget everything'
+      - 'new instructions'
+  patterns_roleplay:
+    http.request.body|contains:
+      - 'you are now'
+      - 'act as if'
+      - 'pretend you are'
+      - 'simulate being'
+  patterns_extraction:
+    http.request.body|contains:
+      - 'print your prompt'
+      - 'show me your rules'
+      - 'what are your instructions'
+      - 'reveal system message'
+  condition: selection_endpoint and (patterns_ignore or patterns_roleplay or patterns_extraction)
+fields:
+  - user.id
+  - user.email
+  - source.ip
+  - http.request.body
+  - http.response.status_code
+falsepositives:
+  - Legitimate testing activities
+  - Security research
+  - Red team exercises
+level: high

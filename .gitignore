@@ -1,0 +1,53 @@
+!*.tfvars.example
+# Build outputs
+# Dependencies
+# Docker
+# IDE
+# Kubernetes
+# Logs
+# OS
+# Secrets (never commit)
+# Terraform
+# Testing
+*$py.class
+*.egg-info/
+*.key
+*.kubeconfig
+*.log
+*.pem
+*.py[cod]
+*.swo
+*.swp
+*.tfstate
+*.tfstate.*
+*.tfvars
+*~
+.claude/
+.claude/settings.local.json
+.coverage
+.docker/
+.DS_Store
+.env
+.env.*.local
+.env.local
+.idea/
+.pytest_cache/
+.terraform/
+.tox/
+.venv/
+.vscode/
+__pycache__/
+bin/
+build/
+credentials.json
+dist/
+env/
+htmlcov/
+kubeconfig
+logs/
+node_modules/
+obj/
+secrets/
+target/
+Thumbs.db
+venv/

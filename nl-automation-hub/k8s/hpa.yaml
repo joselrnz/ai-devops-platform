@@ -1,0 +1,59 @@
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: nl-hub-api-hpa
+  namespace: nl-automation-hub
+  labels:
+    app.kubernetes.io/name: nl-hub-api-hpa
+    app.kubernetes.io/part-of: nl-automation-hub
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: nl-hub-api
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Percent
+          value: 10
+          periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+        - type: Percent
+          value: 100
+          periodSeconds: 15
+        - type: Pods
+          value: 4
+          periodSeconds: 15
+      selectPolicy: Max
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: nl-hub-api-pdb
+  namespace: nl-automation-hub
+  labels:
+    app.kubernetes.io/name: nl-hub-api-pdb
+    app.kubernetes.io/part-of: nl-automation-hub
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: nl-hub-api

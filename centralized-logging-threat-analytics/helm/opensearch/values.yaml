@@ -1,0 +1,204 @@
+# OpenSearch cluster configuration for production SIEM
+
+# Cluster settings
+clusterName: "opensearch-cluster"
+nodeGroup: "master"
+
+# Security
+opensearchJavaOpts: "-Xmx2g -Xms2g"
+
+# Replicas (3-node cluster for HA)
+replicas: 3
+
+# Roles for this node group
+roles:
+  - master
+  - ingest
+  - data
+  - remote_cluster_client
+
+# Resources
+resources:
+  requests:
+    cpu: "1000m"
+    memory: "4Gi"
+  limits:
+    cpu: "2000m"
+    memory: "4Gi"
+
+# Persistence
+persistence:
+  enabled: true
+  size: 100Gi
+  storageClass: "gp3"
+
+# Security configuration
+config:
+  opensearch.yml: |
+    cluster.name: opensearch-cluster
+    network.host: 0.0.0.0
+
+    # Security
+    plugins:
+      security:
+        ssl:
+          transport:
+            pemcert_filepath: esnode.pem
+            pemkey_filepath: esnode-key.pem
+            pemtrustedcas_filepath: root-ca.pem
+            enforce_hostname_verification: false
+          http:
+            enabled: true
+            pemcert_filepath: esnode.pem
+            pemkey_filepath: esnode-key.pem
+            pemtrustedcas_filepath: root-ca.pem
+        allow_unsafe_democertificates: false
+        allow_default_init_securityindex: true
+        authcz.admin_dn:
+          - CN=admin,OU=SSL,O=Test,L=Test,C=DE
+        nodes_dn:
+          - 'CN=*.opensearch-cluster-master,OU=SSL,O=Test,L=Test,C=DE'
+        audit.type: internal_opensearch
+        enable_snapshot_restore_privilege: true
+        check_snapshot_restore_write_privileges: true
+        restapi:
+          roles_enabled: ["all_access", "security_rest_api_access"]
+        system_indices:
+          enabled: true
+          indices:
+            [
+              ".opendistro-alerting-config",
+              ".opendistro-alerting-alert*",
+              ".opendistro-anomaly-results*",
+              ".opendistro-anomaly-detector*",
+              ".opendistro-anomaly-checkpoints",
+              ".opendistro-anomaly-detection-state",
+              ".opendistro-reports-*",
+              ".opendistro-notifications-*",
+              ".opendistro-notebooks",
+              ".opendistro-asynchronous-search-response*",
+            ]
+
+    # Index settings
+    action.auto_create_index: true
+    cluster.routing.allocation.disk.threshold_enabled: true
+    cluster.routing.allocation.disk.watermark.low: 85%
+    cluster.routing.allocation.disk.watermark.high: 90%
+    cluster.routing.allocation.disk.watermark.flood_stage: 95%
+
+# Index State Management (ISM) policies
+ism:
+  enabled: true
+  policies:
+    - name: logs-rollover-policy
+      policy:
+        description: "Rollover logs based on size and age"
+        default_state: "hot"
+        states:
+          - name: hot
+            actions:
+              - rollover:
+                  min_index_age: "1d"
+                  min_primary_shard_size: "50gb"
+            transitions:
+              - state_name: warm
+                conditions:
+                  min_index_age: "7d"
+          - name: warm
+            actions:
+              - replica_count:
+                  number_of_replicas: 1
+            transitions:
+              - state_name: cold
+                conditions:
+                  min_index_age: "30d"
+          - name: cold
+            actions:
+              - replica_count:
+                  number_of_replicas: 0
+              - read_only: {}
+            transitions:
+              - state_name: delete
+                conditions:
+                  min_index_age: "90d"
+          - name: delete
+            actions:
+              - delete: {}
+
+# Service
+service:
+  type: ClusterIP
+  httpPort: 9200
+  transportPort: 9300
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "9200"
+    prometheus.io/path: "/_prometheus/metrics"
+
+# Monitoring
+prometheus:
+  enabled: true
+  serviceMonitor:
+    enabled: true
+    interval: 30s
+
+# Anti-affinity to spread pods across nodes
+antiAffinity: "hard"
+
+# Pod disruption budget
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 2
+
+# Security Context
+securityContext:
+  capabilities:
+    drop:
+      - ALL
+  runAsNonRoot: true
+  runAsUser: 1000
+
+# Extra environment variables
+extraEnvs:
+  - name: OPENSEARCH_INITIAL_ADMIN_PASSWORD
+    valueFrom:
+      secretKeyRef:
+        name: opensearch-credentials
+        key: admin-password
+  - name: DISABLE_INSTALL_DEMO_CONFIG
+    value: "true"
+
+# Plugins to install
+opensearchPlugins:
+  enabled: true
+  installList:
+    - repository-s3  # For S3 snapshots
+
+# Lifecycle hooks
+lifecycle:
+  postStart:
+    exec:
+      command:
+        - bash
+        - -c
+        - |
+          #!/bin/bash
+          # Wait for cluster to be ready
+          until curl -s -k -u admin:${OPENSEARCH_INITIAL_ADMIN_PASSWORD} https://localhost:9200/_cluster/health; do
+            sleep 5
+          done
+          # Create index templates
+          curl -X PUT -k -u admin:${OPENSEARCH_INITIAL_ADMIN_PASSWORD} \
+            "https://localhost:9200/_index_template/logs" \
+            -H 'Content-Type: application/json' \
+            -d '{
+              "index_patterns": ["logs-*"],
+              "template": {
+                "settings": {
+                  "number_of_shards": 2,
+                  "number_of_replicas": 1,
+                  "index.lifecycle.name": "logs-rollover-policy",
+                  "index.lifecycle.rollover_alias": "logs"
+                }
+              }
+            }'

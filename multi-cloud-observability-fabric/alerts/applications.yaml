@@ -1,0 +1,159 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: application-alerts
+  namespace: monitoring
+  labels:
+    prometheus: kube-prometheus
+spec:
+  groups:
+    - name: application.rules
+      interval: 30s
+      rules:
+        # RED method alerts (Rate, Errors, Duration)
+
+        # High error rate
+        - alert: HighErrorRate
+          expr: |
+            (
+              sum(rate(http_requests_total{status=~"5.."}[5m])) by (service, namespace)
+              /
+              sum(rate(http_requests_total[5m])) by (service, namespace)
+            ) > 0.05
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High error rate for {{ $labels.service }}"
+            description: "Error rate is {{ $value | humanizePercentage }} for service {{ $labels.namespace }}/{{ $labels.service }}."
+
+        # Critical error rate
+        - alert: CriticalErrorRate
+          expr: |
+            (
+              sum(rate(http_requests_total{status=~"5.."}[5m])) by (service, namespace)
+              /
+              sum(rate(http_requests_total[5m])) by (service, namespace)
+            ) > 0.10
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Critical error rate for {{ $labels.service }}"
+            description: "Error rate is {{ $value | humanizePercentage }} for service {{ $labels.namespace }}/{{ $labels.service }}."
+
+        # High latency (p95)
+        - alert: HighLatency
+          expr: |
+            histogram_quantile(0.95,
+              sum(rate(http_request_duration_seconds_bucket[5m])) by (le, service, namespace)
+            ) > 2
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High latency for {{ $labels.service }}"
+            description: "p95 latency is {{ $value }}s for service {{ $labels.namespace }}/{{ $labels.service }}."
+
+        # Low request rate (potential service issue)
+        - alert: LowRequestRate
+          expr: sum(rate(http_requests_total[5m])) by (service, namespace) < 1
+          for: 10m
+          labels:
+            severity: info
+          annotations:
+            summary: "Low request rate for {{ $labels.service }}"
+            description: "Request rate is {{ $value }} req/s for service {{ $labels.namespace }}/{{ $labels.service }}."
+
+        # Database connection pool exhaustion
+        - alert: DatabaseConnectionPoolExhausted
+          expr: (db_connection_pool_active / db_connection_pool_max) > 0.9
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Database connection pool near exhaustion for {{ $labels.service }}"
+            description: "Database connection pool is {{ $value | humanizePercentage }} utilized for {{ $labels.service }}."
+
+        # Cache hit rate low
+        - alert: LowCacheHitRate
+          expr: |
+            (
+              sum(rate(cache_hits_total[5m])) by (service)
+              /
+              sum(rate(cache_requests_total[5m])) by (service)
+            ) < 0.5
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Low cache hit rate for {{ $labels.service }}"
+            description: "Cache hit rate is {{ $value | humanizePercentage }} for {{ $labels.service }}."
+
+        # LLM-specific alerts
+        - alert: HighLLMTokenUsage
+          expr: sum(rate(llm_tokens_total[5m])) by (model, service) > 1000000
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High LLM token usage for {{ $labels.model }}"
+            description: "Token usage rate is {{ $value }} tokens/s for model {{ $labels.model }} in {{ $labels.service }}."
+
+        - alert: HighLLMCosts
+          expr: sum(rate(llm_cost_usd_total[1h])) > 100
+          for: 1h
+          labels:
+            severity: critical
+          annotations:
+            summary: "High LLM costs detected"
+            description: "LLM costs are ${{ $value }}/hour, exceeding budget threshold."
+
+        - alert: LLMRateLimitApproaching
+          expr: (llm_rate_limit_remaining / llm_rate_limit_total) < 0.2
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Approaching LLM rate limit for {{ $labels.provider }}"
+            description: "Only {{ $value | humanizePercentage }} of rate limit remaining for {{ $labels.provider }}."
+
+        # Queue depth alerts
+        - alert: HighQueueDepth
+          expr: queue_depth > 1000
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High queue depth for {{ $labels.queue }}"
+            description: "Queue {{ $labels.queue }} has {{ $value }} items pending."
+
+        # Worker availability
+        - alert: NoAvailableWorkers
+          expr: worker_available_count == 0
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "No available workers for {{ $labels.service }}"
+            description: "Service {{ $labels.service }} has no available workers to process requests."
+
+        # API Gateway alerts
+        - alert: APIGatewayThrottling
+          expr: sum(rate(apigateway_requests_throttled_total[5m])) by (api) > 10
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "API Gateway throttling for {{ $labels.api }}"
+            description: "API {{ $labels.api }} is throttling {{ $value }} req/s."
+
+        # Circuit breaker alerts
+        - alert: CircuitBreakerOpen
+          expr: circuit_breaker_state{state="open"} == 1
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Circuit breaker open for {{ $labels.service }}"
+            description: "Circuit breaker for {{ $labels.service }} has been open for more than 5 minutes."

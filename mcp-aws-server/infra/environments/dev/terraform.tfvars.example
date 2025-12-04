@@ -1,0 +1,27 @@
+# Dev Environment Configuration
+# Copy this file to terraform.tfvars and fill in your values
+
+# REQUIRED: Your public IP address
+# Find your IP at: https://whatismyipaddress.com/
+# Format: "x.x.x.x/32"
+allowed_ip = "YOUR_PUBLIC_IP/32"
+
+# Optional: AWS region (default: us-east-1)
+aws_region = "us-east-1"
+
+# Optional: Project name (default: mcp-server)
+project_name = "mcp-server"
+
+# Optional: Environment (default: dev)
+environment = "dev"
+
+# Optional: Override ECS settings
+# ecs_instance_type     = "t2.micro"  # Free tier
+# ecs_desired_capacity  = 1
+# ecs_max_size          = 1
+
+# Optional: Override RDS settings
+# rds_instance_class    = "db.t3.micro"  # Free tier
+# rds_allocated_storage = 20             # Free tier max
+# db_name               = "mcpdb"
+# db_username           = "mcpadmin"

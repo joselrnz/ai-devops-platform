@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: nl-automation-hub
+  labels:
+    app.kubernetes.io/name: nl-automation-hub
+    app.kubernetes.io/part-of: ai-devops-platform
+    istio-injection: enabled

@@ -1,0 +1,68 @@
+# Docker Compose for local development
+# Includes MCP server, PostgreSQL, and LocalStack for AWS emulation
+
+version: '3.8'
+
+services:
+  # PostgreSQL database for audit logs
+  postgres:
+    image: postgres:15-alpine
+    container_name: mcp-postgres
+    environment:
+      POSTGRES_DB: mcpdb
+      POSTGRES_USER: mcpadmin
+      POSTGRES_PASSWORD: dev_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mcpadmin"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # MCP AWS Server (FastAPI)
+  mcp-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mcp-server
+    ports:
+      - "8000:8000"
+    environment:
+      - AWS_REGION=us-east-1
+      - ENVIRONMENT=development
+      - LOG_LEVEL=INFO
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=mcpdb
+      - DB_USER=mcpadmin
+      - DB_PASSWORD=dev_password
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./src:/app/src
+      - ~/.aws:/home/mcpuser/.aws:ro  # Mount AWS credentials (read-only)
+    command: python -m src.api.main
+
+  # Optional: LocalStack for AWS service emulation (testing)
+  localstack:
+    image: localstack/localstack:latest
+    container_name: mcp-localstack
+    ports:
+      - "4566:4566"  # LocalStack gateway
+      - "4571:4571"  # Deprecated port (for compatibility)
+    environment:
+      - SERVICES=ec2,ecs,rds,cloudwatch,logs
+      - DEBUG=1
+      - DATA_DIR=/tmp/localstack/data
+      - DOCKER_HOST=unix:///var/run/docker.sock
+    volumes:
+      - localstack_data:/tmp/localstack
+      - /var/run/docker.sock:/var/run/docker.sock
+
+volumes:
+  postgres_data:
+  localstack_data:

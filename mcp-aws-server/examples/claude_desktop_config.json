@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "aws-mcp": {
+      "command": "python",
+      "args": [
+        "-m",
+        "src.mcp_server.server"
+      ],
+      "cwd": "/path/to/mcp-aws-server",
+      "env": {
+        "AWS_REGION": "us-east-1",
+        "AWS_PROFILE": "default"
+      }
+    }
+  }
+}

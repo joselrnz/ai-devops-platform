@@ -1,0 +1,129 @@
+{
+  "dashboard": {
+    "title": "Multi-Cloud Infrastructure Overview",
+    "tags": ["infrastructure", "multi-cloud", "overview"],
+    "timezone": "browser",
+    "editable": true,
+    "graphTooltip": 1,
+    "panels": [
+      {
+        "id": 1,
+        "title": "Total Cloud Resources by Provider",
+        "type": "piechart",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+        "targets": [
+          {
+            "expr": "count(up{cloud_provider!=\"\"}) by (cloud_provider)",
+            "legendFormat": "{{cloud_provider}}"
+          }
+        ]
+      },
+      {
+        "id": 2,
+        "title": "Resource Health Status",
+        "type": "stat",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+        "targets": [
+          {
+            "expr": "count(up == 1)",
+            "legendFormat": "Healthy"
+          },
+          {
+            "expr": "count(up == 0)",
+            "legendFormat": "Down"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": null, "color": "green"},
+                {"value": 1, "color": "red"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 3,
+        "title": "CPU Usage by Cloud Provider",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 24, "x": 0, "y": 8},
+        "targets": [
+          {
+            "expr": "avg(100 - (avg by (instance, cloud_provider) (irate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)) by (cloud_provider)",
+            "legendFormat": "{{cloud_provider}}"
+          }
+        ],
+        "yaxes": [
+          {"format": "percent", "label": "CPU Usage"}
+        ]
+      },
+      {
+        "id": 4,
+        "title": "Memory Usage by Cloud Provider",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 24, "x": 0, "y": 16},
+        "targets": [
+          {
+            "expr": "avg((1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100) by (cloud_provider)",
+            "legendFormat": "{{cloud_provider}}"
+          }
+        ],
+        "yaxes": [
+          {"format": "percent", "label": "Memory Usage"}
+        ]
+      },
+      {
+        "id": 5,
+        "title": "Network Traffic by Cloud Provider",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 24, "x": 0, "y": 24},
+        "targets": [
+          {
+            "expr": "sum(rate(node_network_receive_bytes_total[5m])) by (cloud_provider)",
+            "legendFormat": "{{cloud_provider}} IN"
+          },
+          {
+            "expr": "sum(rate(node_network_transmit_bytes_total[5m])) by (cloud_provider)",
+            "legendFormat": "{{cloud_provider}} OUT"
+          }
+        ],
+        "yaxes": [
+          {"format": "Bps", "label": "Network Traffic"}
+        ]
+      },
+      {
+        "id": 6,
+        "title": "Estimated Cloud Costs (Monthly)",
+        "type": "bargauge",
+        "gridPos": {"h": 8, "w": 24, "x": 0, "y": 32},
+        "targets": [
+          {
+            "expr": "sum(aws_cost_explorer_cost_total) by (service)",
+            "legendFormat": "AWS {{service}}"
+          },
+          {
+            "expr": "sum(azure_cost_total) by (service)",
+            "legendFormat": "Azure {{service}}"
+          },
+          {
+            "expr": "sum(gcp_billing_cost_total) by (service)",
+            "legendFormat": "GCP {{service}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "currencyUSD"
+          }
+        }
+      }
+    ],
+    "time": {
+      "from": "now-6h",
+      "to": "now"
+    },
+    "refresh": "30s"
+  }
+}

@@ -1,0 +1,247 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: python-app
+  namespace: default
+spec:
+  replicas: 3
+  revisionHistoryLimit: 3
+
+  selector:
+    matchLabels:
+      app: python-app
+
+  template:
+    metadata:
+      labels:
+        app: python-app
+        version: stable
+    spec:
+      containers:
+      - name: python-app
+        image: ghcr.io/myorg/python-app:latest
+        ports:
+        - containerPort: 8000
+          protocol: TCP
+        env:
+        - name: ENVIRONMENT
+          value: "production"
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+
+  strategy:
+    blueGreen:
+      # Active service (receives production traffic)
+      activeService: python-app-active
+
+      # Preview service (for testing new version)
+      previewService: python-app-preview
+
+      # Automatically promote after successful tests
+      autoPromotionEnabled: false
+
+      # Time to wait before auto-promotion (if enabled)
+      autoPromotionSeconds: 300
+
+      # Scale down old version after promotion
+      scaleDownDelaySeconds: 30
+
+      # Abort scale down if analysis fails
+      scaleDownDelayRevisionLimit: 2
+
+      # Anti-affinity to separate blue/green pods
+      antiAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution: {}
+
+      # Pre-promotion analysis
+      prePromotionAnalysis:
+        templates:
+        - templateName: smoke-test
+        - templateName: load-test
+        args:
+        - name: service-name
+          value: python-app-preview
+
+      # Post-promotion analysis
+      postPromotionAnalysis:
+        templates:
+        - templateName: success-rate
+        - templateName: error-rate
+        args:
+        - name: service-name
+          value: python-app-active
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: python-app-active
+  namespace: default
+spec:
+  selector:
+    app: python-app
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 8000
+  type: ClusterIP
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: python-app-preview
+  namespace: default
+spec:
+  selector:
+    app: python-app
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 8000
+  type: ClusterIP
+
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: smoke-test
+  namespace: default
+spec:
+  args:
+  - name: service-name
+  metrics:
+  - name: smoke-test
+    interval: 10s
+    count: 3
+    successCondition: result == "success"
+    provider:
+      job:
+        spec:
+          template:
+            spec:
+              containers:
+              - name: smoke-test
+                image: curlimages/curl:latest
+                command:
+                - sh
+                - -c
+                - |
+                  response=$(curl -s -o /dev/null -w "%{http_code}" http://{{args.service-name}}/health)
+                  if [ "$response" -eq 200 ]; then
+                    echo "success"
+                  else
+                    echo "failure"
+                    exit 1
+                  fi
+              restartPolicy: Never
+
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: load-test
+  namespace: default
+spec:
+  args:
+  - name: service-name
+  metrics:
+  - name: load-test
+    interval: 30s
+    count: 1
+    successCondition: result.p95 < 500
+    provider:
+      job:
+        spec:
+          template:
+            spec:
+              containers:
+              - name: load-test
+                image: grafana/k6:latest
+                command:
+                - k6
+                - run
+                - -
+                stdin: |
+                  import http from 'k6/http';
+                  import { check } from 'k6';
+
+                  export let options = {
+                    vus: 50,
+                    duration: '30s',
+                    thresholds: {
+                      http_req_duration: ['p(95)<500'],
+                      http_req_failed: ['rate<0.01'],
+                    },
+                  };
+
+                  export default function () {
+                    let res = http.get('http://{{args.service-name}}/');
+                    check(res, {
+                      'status is 200': (r) => r.status === 200,
+                    });
+                  }
+              restartPolicy: Never
+
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: success-rate
+  namespace: default
+spec:
+  args:
+  - name: service-name
+  metrics:
+  - name: success-rate
+    interval: 1m
+    count: 5
+    successCondition: result >= 0.95
+    failureLimit: 2
+    provider:
+      prometheus:
+        address: http://prometheus-server.monitoring.svc.cluster.local:9090
+        query: |
+          sum(rate(http_requests_total{service="{{args.service-name}}",status=~"2.."}[5m]))
+          /
+          sum(rate(http_requests_total{service="{{args.service-name}}"}[5m]))
+
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: error-rate
+  namespace: default
+spec:
+  args:
+  - name: service-name
+  metrics:
+  - name: error-rate
+    interval: 1m
+    count: 5
+    successCondition: result <= 0.05
+    failureLimit: 2
+    provider:
+      prometheus:
+        address: http://prometheus-server.monitoring.svc.cluster.local:9090
+        query: |
+          sum(rate(http_requests_total{service="{{args.service-name}}",status=~"5.."}[5m]))
+          /
+          sum(rate(http_requests_total{service="{{args.service-name}}"}[5m]))

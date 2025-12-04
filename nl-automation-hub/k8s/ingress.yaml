@@ -1,0 +1,75 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: nl-hub-ingress
+  namespace: nl-automation-hub
+  labels:
+    app.kubernetes.io/name: nl-hub-ingress
+    app.kubernetes.io/part-of: nl-automation-hub
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+    nginx.ingress.kubernetes.io/websocket-services: "nl-hub-api"
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - nl-hub.your-domain.com
+      secretName: nl-hub-tls
+  rules:
+    - host: nl-hub.your-domain.com
+      http:
+        paths:
+          # API routes
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: nl-hub-api
+                port:
+                  number: 8000
+          # WebSocket routes
+          - path: /ws
+            pathType: Prefix
+            backend:
+              service:
+                name: nl-hub-api
+                port:
+                  number: 8000
+          # Health check
+          - path: /health
+            pathType: Exact
+            backend:
+              service:
+                name: nl-hub-api
+                port:
+                  number: 8000
+          # API docs
+          - path: /docs
+            pathType: Exact
+            backend:
+              service:
+                name: nl-hub-api
+                port:
+                  number: 8000
+          - path: /redoc
+            pathType: Exact
+            backend:
+              service:
+                name: nl-hub-api
+                port:
+                  number: 8000
+          # Frontend (catch-all)
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: nl-hub-frontend
+                port:
+                  number: 80

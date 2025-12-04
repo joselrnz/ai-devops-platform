@@ -1,0 +1,122 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: agent-alerts
+  namespace: monitoring
+  labels:
+    prometheus: kube-prometheus
+spec:
+  groups:
+    - name: agent.rules
+      interval: 30s
+      rules:
+        # High Error Rate
+        - alert: HighErrorRate
+          expr: |
+            (
+              sum(rate(http_requests_total{job="agent",status=~"5.."}[5m])) by (namespace, model)
+              /
+              sum(rate(http_requests_total{job="agent"}[5m])) by (namespace, model)
+            ) > 0.05
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High error rate for {{ $labels.model }} in {{ $labels.namespace }}"
+            description: "Error rate is {{ $value | humanizePercentage }} for the last 5 minutes."
+
+        # High Latency
+        - alert: HighLatency
+          expr: |
+            histogram_quantile(0.95,
+              sum(rate(http_request_duration_seconds_bucket{job="agent"}[5m])) by (le, namespace, model)
+            ) > 2
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High latency for {{ $labels.model }} in {{ $labels.namespace }}"
+            description: "p95 latency is {{ $value }}s for the last 5 minutes."
+
+        # Memory Pressure
+        - alert: HighMemoryUsage
+          expr: |
+            (
+              sum(container_memory_working_set_bytes{namespace=~"tenant-.*",container="agent"}) by (namespace, pod)
+              /
+              sum(container_spec_memory_limit_bytes{namespace=~"tenant-.*",container="agent"}) by (namespace, pod)
+            ) > 0.9
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High memory usage in {{ $labels.namespace }}/{{ $labels.pod }}"
+            description: "Memory usage is {{ $value | humanizePercentage }} of limit."
+
+        # Pod Crash Loops
+        - alert: PodCrashLooping
+          expr: |
+            rate(kube_pod_container_status_restarts_total{namespace=~"tenant-.*",container="agent"}[15m]) > 0.2
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Pod {{ $labels.namespace }}/{{ $labels.pod }} is crash looping"
+            description: "Pod has restarted {{ $value }} times in the last 15 minutes."
+
+        # Low Availability
+        - alert: LowAvailability
+          expr: |
+            (
+              sum(kube_pod_status_phase{namespace=~"tenant-.*",phase="Running"}) by (namespace)
+              /
+              sum(kube_deployment_spec_replicas{namespace=~"tenant-.*"}) by (namespace)
+            ) < 0.99
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Low availability in {{ $labels.namespace }}"
+            description: "Only {{ $value | humanizePercentage }} of pods are running."
+
+        # HPA at Max Capacity
+        - alert: HPAMaxedOut
+          expr: |
+            kube_horizontalpodautoscaler_status_current_replicas{namespace=~"tenant-.*"}
+            ==
+            kube_horizontalpodautoscaler_spec_max_replicas{namespace=~"tenant-.*"}
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "HPA {{ $labels.namespace }}/{{ $labels.horizontalpodautoscaler }} is at max capacity"
+            description: "HPA has been at maximum replicas for 15 minutes. Consider increasing max replicas."
+
+        # CPU Throttling
+        - alert: CPUThrottling
+          expr: |
+            sum(rate(container_cpu_cfs_throttled_seconds_total{namespace=~"tenant-.*",container="agent"}[5m])) by (namespace, pod)
+            /
+            sum(rate(container_cpu_cfs_periods_total{namespace=~"tenant-.*",container="agent"}[5m])) by (namespace, pod)
+            > 0.5
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High CPU throttling in {{ $labels.namespace }}/{{ $labels.pod }}"
+            description: "{{ $value | humanizePercentage }} of CPU time is being throttled."
+
+        # Disk Space
+        - alert: LowDiskSpace
+          expr: |
+            (
+              sum(kubelet_volume_stats_available_bytes{namespace=~"tenant-.*"}) by (namespace, persistentvolumeclaim)
+              /
+              sum(kubelet_volume_stats_capacity_bytes{namespace=~"tenant-.*"}) by (namespace, persistentvolumeclaim)
+            ) < 0.1
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Low disk space for {{ $labels.namespace }}/{{ $labels.persistentvolumeclaim }}"
+            description: "Only {{ $value | humanizePercentage }} disk space remaining."

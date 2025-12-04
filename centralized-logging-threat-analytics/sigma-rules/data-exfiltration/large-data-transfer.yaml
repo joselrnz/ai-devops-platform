@@ -1,0 +1,38 @@
+title: Large Data Transfer Detected
+id: 3c4d5e6f-7g8h-9i0j-1k2l-m3n4o5p6q7r8
+status: experimental
+description: Detects unusually large data transfers that may indicate data exfiltration
+references:
+  - https://attack.mitre.org/techniques/T1048/
+author: Jose
+date: 2024/01/15
+tags:
+  - attack.exfiltration
+  - attack.t1048
+logsource:
+  category: network_connection
+  product: firewall
+detection:
+  selection:
+    event.action: 'allowed'
+    network.direction: 'outbound'
+    network.bytes: '>= 1073741824'  # 1GB
+  filter_backup:
+    destination.domain|endswith:
+      - '.s3.amazonaws.com'
+      - '.backup.local'
+    user.name:
+      - 'backup-service'
+      - 'vault-agent'
+  condition: selection and not filter_backup
+fields:
+  - source.ip
+  - destination.ip
+  - destination.domain
+  - network.bytes
+  - user.name
+falsepositives:
+  - Legitimate backup operations
+  - Large file downloads
+  - Cloud synchronization
+level: medium
